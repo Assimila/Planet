@@ -62,17 +62,20 @@ client = api.ClientV1( api_key = api_key['api_key'] )
 
 # Build a query using the AOI and a cloud_cover filter
 # that get images with lower than 10% cloud cover
-# and acquired before Nov 1st, 2017
+# and acquired on Nov 1st, 2017
 query = filters.and_filter(
     filters.geom_filter( aoi ),
     filters.range_filter( 'cloud_cover', lt = 0.1 ),
-    filters.date_range( 'acquired', lte = '2017-11-01T00:00:00.000Z' )
+    filters.date_range( 'acquired', 
+                        gte = '2017-11-01T00:00:00.000Z',
+                        lte = '2017-11-01T23:59:00.000Z' )
 )
 
 # Build a request for only PlanetScope imagery
+# Item types:
+#   https://www.planet.com/docs/reference/data-api/items-assets
 request = filters.build_search_request(
-    #query, item_types = [ 'PSOrthoTile', 'REOrthoTile' ]
-    query, item_types = [ 'PSOrthoTile' ]
+    query, item_types = [ 'PSScene4Band' ]
 )
 
 # Get results
@@ -138,7 +141,12 @@ for item in result.items_iter( limit = NumberOfImages ):
     vsicurl_url = '/vsicurl/' + asset_location_url
     output_file = item_id + '_subarea.tif'
 
+    # TODO
+    # Get angular information from metadata
+    # -- sensor and sun angles --
+
     # GDAL Warp crops the image by our AOI, and saves it
+    subset_fname = 'subset.geojson'
     gdal.Warp( output_file, vsicurl_url, dstSRS = 'EPSG:4326', 
-               cutlineDSName = 'subset.geojson', cropToCutline = True )
+               cutlineDSName = subset_fname, cropToCutline = True )
 
