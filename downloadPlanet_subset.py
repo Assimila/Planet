@@ -11,7 +11,7 @@ Purpose
       https://www.planet.com/docs/reference/data-api/items-assets/#item-type
 
       Compulsory steps before running the script:      
-      1 - It is neccesary first to create an account. Set the user login 
+      1 - It is necessary first to create an account. Set the user login
           details in YOUR_EMAIL and YOUR_PASSWD strings within the script
       2 - Get the API key at planet.com/account/
           Store the key as en environmental variable, e.g. in .bashrc
@@ -22,7 +22,7 @@ Purpose
     - To run the script and get data (2 images):
       python downloadPlanet.py
 
-      To download more than 2 images, modify the NumberOfImages variable 
+      To download more than 2 images, modify the json 'max_num_to_download' variable
 
 """
 
@@ -107,7 +107,8 @@ def activate_item(item_info):
 
 # GeoJSON AOI
 # e.g. http://geojson.io
-# Reads the subset.geojson file within the planet directory
+# Reads the subset.geojson file within the planet directory and
+# sets the aoi variable required by the download script.
 with open("subset.geojson") as f:
     geoj = json.load(f)
 
@@ -116,8 +117,25 @@ aoi = {
      "coordinates": geoj['features'][0]['geometry']['coordinates']
 }
 
+# Read the configuration json file and extract variables to be used
+# in the script.
+with open("configuration.json") as f:
+    conf = json.load(f)
+
+    login_email = conf[0]['login_email']
+    passwd = conf[0]['pw']
+    acceptable_cloud_cover = conf[0]['acceptable_cloud_cover']
+    start_date = conf[0]['start_date']
+    end_date = conf[0]['end_date']
+    item_type_name = conf[0]['item_type_name']
+    asset_type = conf[0]['asset_type']
+
+    # Set a limit for the maximum number of results to download from the API
+    # that have been returned from the API request.
+    max_download = conf[0]['max_num_to_download']
+
 # Get API key
-api_key = api.ClientV1().login('lopez.saldana@gmail.com', 'gertan20')
+api_key = api.ClientV1().login(login_email, passwd)
 
 # Create client
 client = api.ClientV1(api_key=api_key['api_key'])
@@ -127,17 +145,17 @@ client = api.ClientV1(api_key=api_key['api_key'])
 # and acquired on Nov 1st, 2017
 query = filters.and_filter(
     filters.geom_filter(aoi),
-    filters.range_filter('cloud_cover', lt=0.1),
+    filters.range_filter('cloud_cover', lt=acceptable_cloud_cover),
     filters.date_range('acquired',
-                        gte='2017-03-01T00:00:00.000Z',
-                        lte='2017-03-05T23:59:00.000Z')
+                       gte=start_date,
+                       lte=end_date)
 )
 
 # Build a request for only PlanetScope imagery
 # Item types:
 #   https://www.planet.com/docs/reference/data-api/items-assets
 request = filters.build_search_request(
-    query, item_types=['PSScene4Band'])
+    query, item_types=[item_type_name])
 
 # Get results
 result = client.quick_search(request)
@@ -146,26 +164,18 @@ result = client.quick_search(request)
 session = requests.Session()
 session.auth = (api_key['api_key'], '')
 
-# Set asset type to download
-asset_type = 'analytic'
-
 stdout.write('item_id,  item_type,  cloud_cover,  date\n')
 
-# Set a limit for the maximum number of results to download from the API
-# that have been returned from the API request.
-NumberOfImages = 200
-
-# Loop over each item found during the request and append the info
+# Loop over each item found during the search request and append the info
 # to an image_ids text file so that it can be passed to the ThreadPool
 # to parallel-ize the requests.
 #
-# Also, save the metadata of each file to a text file with the filename
-# set to the image_id.
+# Also, save the metadata of each file to a text file for each image_id.
 with open("image_ids.txt", 'w') as id_file:
 
     # items_iter returns a limited iterator of all results,
     # behind the scenes, the client is paging responses from the API
-    for item in result.items_iter(limit=NumberOfImages):
+    for item in result.items_iter(limit=max_download):
         props = item['properties']
         item_id = item['id']
         item_type = item['properties']['item_type']
@@ -198,58 +208,3 @@ with open("image_ids.txt", 'r') as id_file:
     thread_pool.map(activate_item, item_info)
 
 # ================================================================= #
-
-
-#     # Request an item
-#     item_to_download = \
-#         session.get(
-#         ("https://api.planet.com/data/v1/item-types/" +
-#         "{}/items/{}/assets/").format(item_type, item_id))
-#
-#     # Extract the activation url from the item for the desired asset
-#     item_activation_url = item_to_download.json()[
-#                           asset_type]["_links"]["activate"]
-#
-#     # Request activation
-#     response = session.post(item_activation_url)
-#
-#     # HTTP 204: Success, No Content to show
-#     while response.status_code <> 204:
-#         print "Response code:", response.status_code
-#         print "Waiting for activation code..."
-#         # Activation will take ~8 minutes. Run the command above again
-#         # until you see a URL in the 'location' element of the response.
-#         time.sleep( 9 * 60 )
-#         # Request an item
-#         item_to_download = \
-#             session.get(
-#                 ("https://api.planet.com/data/v1/item-types/" +
-#                  "{}/items/{}/assets/").format(item_type, item_id))
-#
-#         # Extract the activation url from the item for the desired asset
-#         item_activation_url = item_to_download.json()[
-#                                   asset_type]["_links"]["activate"]
-#
-#         # Request activation once again...
-#         response = session.post(item_activation_url)
-#
-#     # Get location of the asset
-#     asset_location_url = item_to_download.json()[asset_type]['location']
-#
-#     # Subset
-#     vsicurl_url = '/vsicurl/' + asset_location_url
-#     output_file = item_id + '_subarea.tif'
-#
-    # Update T. Day 05/02/2018
-    # Save property dictionary to txt file to
-    # obtain and save angular information from metadata
-    # as gdal.Warp removes this information.
-
-    #with open(str(item_id) + ".txt", 'w') as file:
-    #    file.write(json.dumps(props))
-#
-#     # GDAL Warp crops the image by our AOI, and saves it
-#     subset_fname = 'subset.geojson'
-#     gdal.Warp( output_file, vsicurl_url, dstSRS = 'EPSG:4326',
-#                cutlineDSName = subset_fname, cropToCutline = True )
-
