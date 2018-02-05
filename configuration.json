@@ -1,12 +1,12 @@
 [
   {
-    "login_email": "lopez.saldana@gmail.com",
-    "pw": "gertan20",
+    "login_email": "taylor.day@assimila.eu",
+    "pw": "Assimila1PLANET",
     "acceptable_cloud_cover": 0.1,
     "start_date": "2017-03-01T00:00:00.000Z",
-    "end_date": "2017-03-05T23:59:00.000Z",
+    "end_date": "2017-07-22T23:59:00.000Z",
     "item_type_name": "PSScene4Band",
     "asset_type": "analytic",
-    "max_num_to_download": 200
+    "max_num_to_download": 20
   }
 ]

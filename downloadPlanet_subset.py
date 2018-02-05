@@ -36,11 +36,15 @@ import time
 import osgeo.gdal as gdal
 import json
 from multiprocessing.dummy import Pool as ThreadPool
+from retrying import retry
 
 from planet import api
 from planet.api import filters
 from sys import stdout
 
+# @retry(
+#     wait_exponential_multiplier=1000,
+#     wait_exponential_max=600000)
 def activate_item(item_info):
 
     """
@@ -64,12 +68,19 @@ def activate_item(item_info):
         ("https://api.planet.com/data/v1/item-types/" +
         "{}/items/{}/assets/").format(item_type, item_id))
 
+    # if item.status_code == 429:
+    #     raise Exception("rate limit error")
+
+
     # Extract the activation url from the item for the desired asset
     item_activation_url = item_to_download.json()[
                           asset_type]["_links"]["activate"]
 
     # Request activation
     response = session.post(item_activation_url)
+
+    # if response.status_code == 429:
+    #     raise Exception("rate limit error")
 
     # HTTP 204: Success, No Content to show
     while response.status_code <> 204:
@@ -84,12 +95,18 @@ def activate_item(item_info):
                 ("https://api.planet.com/data/v1/item-types/" +
                  "{}/items/{}/assets/").format(item_type, item_id))
 
+        # if item.status_code == 429:
+        #     raise Exception("rate limit error")
+
         # Extract the activation url from the item for the desired asset
         item_activation_url = item_to_download.json()[
                                   asset_type]["_links"]["activate"]
 
         # Request activation once again...
         response = session.post(item_activation_url)
+
+        # if response.status_code == 429:
+        #     raise Exception("rate limit error")
 
     # Get location of the asset
     asset_location_url = item_to_download.json()[asset_type]["location"]
