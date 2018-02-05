@@ -63,62 +63,67 @@ def activate_item(item_info):
     item_id, item_type = item_info.split(" ", 2)
     stdout.write("attempting to obtain "+item_id+item_type+"\n")
 
-    # Request an item
-    item_to_download = \
-        session.get(
-        ("https://api.planet.com/data/v1/item-types/" +
-        "{}/items/{}/assets/").format(item_type, item_id))
+    # Check to prevent trying to download the same image over and over
+    if os.path.isfile("images/" + item_id + "_subarea.tif"):
+        print item_id + " already exists.\n"
 
-    # if item.status_code == 429:
-    #     raise Exception("rate limit error")
-    
-    # Extract the activation url from the item for the desired asset
-    item_activation_url = item_to_download.json()[
-                          asset_type]["_links"]["activate"]
-
-    # Request activation
-    response = session.post(item_activation_url)
-
-    # if response.status_code == 429:
-    #     raise Exception("rate limit error")
-
-    # HTTP 204: Success, No Content to show
-    while response.status_code <> 204:
-        print "Response code:", response.status_code
-        print "Waiting for activation code..."
-        # Activation will take ~8 minutes. Run the command above again
-        # until you see a URL in the "location" element of the response.
-        time.sleep(9*60)
+    else:
         # Request an item
         item_to_download = \
             session.get(
-                ("https://api.planet.com/data/v1/item-types/" +
-                 "{}/items/{}/assets/").format(item_type, item_id))
+            ("https://api.planet.com/data/v1/item-types/" +
+            "{}/items/{}/assets/").format(item_type, item_id))
 
         # if item.status_code == 429:
         #     raise Exception("rate limit error")
 
         # Extract the activation url from the item for the desired asset
         item_activation_url = item_to_download.json()[
-                                  asset_type]["_links"]["activate"]
+                              asset_type]["_links"]["activate"]
 
-        # Request activation once again...
+        # Request activation
         response = session.post(item_activation_url)
 
         # if response.status_code == 429:
         #     raise Exception("rate limit error")
 
-    # Get location of the asset
-    asset_location_url = item_to_download.json()[asset_type]["location"]
+        # HTTP 204: Success, No Content to show
+        while response.status_code <> 204:
+            print "Response code:", response.status_code
+            print "Waiting for activation code..."
+            # Activation will take ~8 minutes. Run the command above again
+            # until you see a URL in the "location" element of the response.
+            time.sleep(9*60)
+            # Request an item
+            item_to_download = \
+                session.get(
+                    ("https://api.planet.com/data/v1/item-types/" +
+                     "{}/items/{}/assets/").format(item_type, item_id))
 
-    # Subset
-    vsicurl_url = "/vsicurl/" + asset_location_url
-    output_file = "images/" + item_id + "_subarea.tif"
+            # if item.status_code == 429:
+            #     raise Exception("rate limit error")
 
-    # GDAL Warp crops the image by our AOI, and saves it
-    subset_fname = "subset.geojson"
-    gdal.Warp(output_file, vsicurl_url, dstSRS="EPSG:4326",
-               cutlineDSName=subset_fname, cropToCutline=True)
+            # Extract the activation url from the item for the desired asset
+            item_activation_url = item_to_download.json()[
+                                      asset_type]["_links"]["activate"]
+
+            # Request activation once again...
+            response = session.post(item_activation_url)
+
+            # if response.status_code == 429:
+            #     raise Exception("rate limit error")
+
+        # Get location of the asset
+        asset_location_url = item_to_download.json()[asset_type]["location"]
+
+        # Subset
+        vsicurl_url = "/vsicurl/" + asset_location_url
+        output_file = "images/" + item_id + "_subarea.tif"
+
+        # GDAL Warp crops the image by our AOI, and saves it
+        subset_fname = "subset.geojson"
+        gdal.Warp(output_file, vsicurl_url, dstSRS="EPSG:4326",
+                   cutlineDSName=subset_fname, cropToCutline=True)
 
 # ========================================================================== #
 
