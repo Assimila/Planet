@@ -61,13 +61,13 @@ def activate_item(item_info):
 
     # Strip out the item_type and item_id from item_info
     item_id, item_type = item_info.split(" ", 2)
-    stdout.write("attempting to obtain "+item_id+item_type+"\n")
 
     # Check to prevent trying to download the same image over and over
     if os.path.isfile("images/" + item_id + "_subarea.tif"):
         print item_id + " already exists.\n"
 
     else:
+        stdout.write("attempting to obtain " + item_id + item_type + "\n")
         # Request an item
         item_to_download = \
             session.get(
