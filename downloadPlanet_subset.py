@@ -56,7 +56,7 @@ def activate_item(item_info):
 
     # Strip out the item_type and item_id from item_info
     item_id, item_type = item_info.split(' ', 2)
-    stdout.write("attempting to obtain "+item_id+item_type)
+    stdout.write("attempting to obtain "+item_id+item_type+'\n')
 
     # Request an item
     item_to_download = \
