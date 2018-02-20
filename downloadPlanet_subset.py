@@ -36,22 +36,22 @@ import time
 import osgeo.gdal as gdal
 import json
 from multiprocessing.dummy import Pool as ThreadPool
-from retrying import retry
 
 from planet import api
 from planet.api import filters
 from sys import stdout
 
 # https://www.planet.com/docs/api-quickstart-examples/large_aoi_best_practices/#rate
-# @retry(
-#     wait_exponential_multiplier=1000,
-#     wait_exponential_max=600000)
+
 def activate_item(item_info):
 
     """
     This is the main method that activates and downloads the API
     request. It is set up to handle parallelism so that multiple
     requests can be handled at once using ThreadPool.
+
+    If you want surface reflectance, see:
+    https://assets.planet.com/marketing/PDF/Planet_Surface_Reflectance_Technical_White_Paper.pdf
 
     :param item_info: This is the line of the item_info text file
                       which details the item_id and item_type.
@@ -74,9 +74,6 @@ def activate_item(item_info):
             ("https://api.planet.com/data/v1/item-types/" +
             "{}/items/{}/assets/").format(item_type, item_id))
 
-        # if item.status_code == 429:
-        #     raise Exception("rate limit error")
-
         # Extract the activation url from the item for the desired asset
         item_activation_url = item_to_download.json()[
                               asset_type]["_links"]["activate"]
@@ -84,24 +81,20 @@ def activate_item(item_info):
         # Request activation
         response = session.post(item_activation_url)
 
-        # if response.status_code == 429:
-        #     raise Exception("rate limit error")
-
         # HTTP 204: Success, No Content to show
         while response.status_code <> 204:
             print "Response code:", response.status_code
             print "Waiting for activation code..."
             # Activation will take ~8 minutes. Run the command above again
             # until you see a URL in the "location" element of the response.
+            print "starting 9 mins"
             time.sleep(9*60)
+            print "ending 9 mins"
             # Request an item
             item_to_download = \
                 session.get(
                     ("https://api.planet.com/data/v1/item-types/" +
                      "{}/items/{}/assets/").format(item_type, item_id))
-
-            # if item.status_code == 429:
-            #     raise Exception("rate limit error")
 
             # Extract the activation url from the item for the desired asset
             item_activation_url = item_to_download.json()[
@@ -109,9 +102,6 @@ def activate_item(item_info):
 
             # Request activation once again...
             response = session.post(item_activation_url)
-
-            # if response.status_code == 429:
-            #     raise Exception("rate limit error")
 
         # Get location of the asset
         asset_location_url = item_to_download.json()[asset_type]["location"]
@@ -198,6 +188,9 @@ with open("id_list/image_ids.txt", "w") as id_file:
     # items_iter returns a limited iterator of all results,
     # behind the scenes, the client is paging responses from the API
     for item in result.items_iter(limit=max_download):
+
+        print item
+
         props = item["properties"]
         item_id = item["id"]
         item_type = item["properties"]["item_type"]
@@ -216,17 +209,17 @@ with open("id_list/image_ids.txt", "w") as id_file:
         # Append each item_id to a text file to support parallelism
         id_file.write(item_id+" "+item_type+"\n")
 
-# Reopen the image_id text file in read mode to
-# pass to the activate_item
-with open("id_list/image_ids.txt", "r") as id_file:
-    item_info = id_file.read().splitlines()[:]
-
-    # Set up the parallelism so that 5 requests can run simultaneously
-    parallelism = 5
-    thread_pool = ThreadPool(parallelism)
-
-    # All items will be sent to the "activate_item" function but only
-    # 5 will be run at once
-    thread_pool.map(activate_item, item_info)
+# # Reopen the image_id text file in read mode to
+# # pass to the activate_item
+# with open("id_list/image_ids.txt", "r") as id_file:
+#     item_info = id_file.read().splitlines()[:]
+#
+#     # Set up the parallelism so that 5 requests can run simultaneously
+#     parallelism = 5
+#     thread_pool = ThreadPool(parallelism)
+#
+#     # All items will be sent to the "activate_item" function but only
+#     # 5 will be run at once
+#     thread_pool.map(activate_item, item_info)
 
 # ================================================================= #
