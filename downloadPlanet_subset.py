@@ -114,7 +114,7 @@ def activate_item(item_info):
             output_file = "images/" + item_id + "_subarea_sr.tif"
 
             # GDAL Warp crops the image by our AOI, and saves it
-            subset_fname = "subset_WGS84.geojson"
+            subset_fname = "subset.geojson"
 
             # TO DO, keep original projection and spatial resolution
             gdal.Warp(output_file,
@@ -133,7 +133,7 @@ def activate_item(item_info):
 # e.g. http://geojson.io
 # Reads the subset.geojson file within the planet directory and
 # sets the aoi variable required by the download script.
-with open("subset_WGS84.geojson") as f:
+with open("subset.geojson") as f:
     geoj = json.load(f)
 
 aoi = {
