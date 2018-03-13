@@ -192,6 +192,15 @@ with open("configuration.json") as f:
     # that have been returned from the API request.
     max_download = conf[0]["max_num_to_download"]
 
+# Set up the file structure in the current directory
+for asset in [asset_type, asset_xml, asset_udm, "id_list", "metadata"]:
+    # Check to prevent trying to download the same image over and over
+    try:
+        os.makedirs(asset + "/")
+    except OSError as e:
+        if e.errno == 17:
+            print "Directory already exists."
+
 # Get API key
 api_key = api.ClientV1().login(login_email, passwd)
 
@@ -253,14 +262,6 @@ with open("id_list/image_ids.txt", "w") as id_file:
         # Append each item_id to a text file to support parallelism
         id_file.write(item_id+","+item_type+","+asset_type+","+asset_xml+","+asset_udm+"\n")
 
-# Set up the file structure in the current directory
-for asset in [asset_type, asset_xml, asset_udm]:
-    # Check to prevent trying to download the same image over and over
-    try:
-        os.makedirs(asset + "/")
-    except OSError as e:
-        if e.errno == 17:
-            print "Directory already exists."
 
 # Reopen the image_id text file in read mode to
 # pass to the activate_item
