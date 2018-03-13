@@ -31,6 +31,7 @@ __version__ = "0.2 (20.10.2017)"
 __email__ = "gerardo.lopezsaldana@assimila.eu"
 
 import os
+import errno
 import requests
 import time
 import osgeo.gdal as gdal
@@ -40,11 +41,11 @@ from multiprocessing.dummy import Pool as ThreadPool
 from planet import api
 from planet.api import filters
 from sys import stdout
+import wget
 
 # https://www.planet.com/docs/api-quickstart-examples/large_aoi_best_practices/#rate
 
-def activate_item(item_info):
-
+def activate_item(asset, item_id, item_type):
     """
     This is the main method that activates and downloads the API
     request. It is set up to handle parallelism so that multiple
@@ -53,68 +54,66 @@ def activate_item(item_info):
     If you want surface reflectance, see:
     https://assets.planet.com/marketing/PDF/Planet_Surface_Reflectance_Technical_White_Paper.pdf
 
-    :param item_info: This is the line of the item_info text file
-                      which details the item_id and item_type.
+    :param asset: The asset type as specified from the Planet API
+    :param item_id: The ID of the image to be downloaded
+    :param item_type: The image type of the image to be downloaded
 
     :return: N/A
     """
 
-    # Strip out the item_type and item_id from item_info
-    item_id, item_type = item_info.split(" ", 2)
+    try:
+        stdout.write("attempting to obtain " + item_id + item_type + "\n")
+        # Request an item
+        item_to_download = \
+            session.get(
+                ("https://api.planet.com/data/v1/item-types/" +
+                 "{}/items/{}/assets/").format(item_type, item_id))
 
-    # Check to prevent trying to download the same image over and over
-    if os.path.isfile("images/" + item_id + "_subarea_sr.tif"):
-        print item_id + " already exists.\n"
+        # Extract the activation url from the item for the desired asset
+        item_activation_url = item_to_download.json()[
+            asset]["_links"]["activate"]
 
-    else:
-        try:
-            stdout.write("attempting to obtain " + item_id + item_type + "\n")
+        # Request activation
+        response = session.post(item_activation_url)
+
+        # HTTP 204: Success, No Content to show
+        while response.status_code <> 204:
+            print "Response code:", response.status_code
+            print "Waiting for activation code..."
+            # Activation will take ~8 minutes. Run the command above again
+            # until you see a URL in the "location" element of the response.
+            print "starting 9 mins"
+            time.sleep(9 * 60)
+            print "ending 9 mins"
             # Request an item
             item_to_download = \
                 session.get(
-                ("https://api.planet.com/data/v1/item-types/" +
-                "{}/items/{}/assets/").format(item_type, item_id))
+                    ("https://api.planet.com/data/v1/item-types/" +
+                     "{}/items/{}/assets/").format(item_type, item_id))
 
             # Extract the activation url from the item for the desired asset
             item_activation_url = item_to_download.json()[
-                                  asset_type]["_links"]["activate"]
+                asset]["_links"]["activate"]
 
-            # Request activation
+            # Request activation once again...
             response = session.post(item_activation_url)
 
-            # HTTP 204: Success, No Content to show
-            while response.status_code <> 204:
-                print "Response code:", response.status_code
-                print "Waiting for activation code..."
-                # Activation will take ~8 minutes. Run the command above again
-                # until you see a URL in the "location" element of the response.
-                print "starting 9 mins"
-                time.sleep(9*60)
-                print "ending 9 mins"
-                # Request an item
-                item_to_download = \
-                    session.get(
-                        ("https://api.planet.com/data/v1/item-types/" +
-                         "{}/items/{}/assets/").format(item_type, item_id))
+        # Get location of the asset
+        asset_location_url = item_to_download.json()[asset]["location"]
 
-                # Extract the activation url from the item for the desired asset
-                item_activation_url = item_to_download.json()[
-                                          asset_type]["_links"]["activate"]
+        print "Downloading " + item_id + " " + asset
 
-                # Request activation once again...
-                response = session.post(item_activation_url)
+        # Subset
+        vsicurl_url = "/vsicurl/" + asset_location_url
 
-            # Get location of the asset
-            asset_location_url = item_to_download.json()[asset_type]["location"]
+        if asset == "analytic_xml":
+            output_file = asset + "/" + item_id + "_" + asset + ".xml"
+            wget.download(asset_location_url, output_file)
 
-            print asset_location_url
-
-            # Subset
-            vsicurl_url = "/vsicurl/" + asset_location_url
-            output_file = "images/" + item_id + "_subarea_sr.tif"
-
+        else:
             # GDAL Warp crops the image by our AOI, and saves it
             subset_fname = "subset.geojson"
+            output_file = asset + "/" + item_id + "_" + asset + ".tif"
 
             # TO DO, keep original projection and spatial resolution
             gdal.Warp(output_file,
@@ -125,8 +124,41 @@ def activate_item(item_info):
                       cutlineDSName=subset_fname,
                       cropToCutline=True)
 
-        except KeyError, e:
-            print "No SR for " + item_id + ":    " + str(e)
+    except KeyError, e:
+        print "No SR for " + item_id + ":    " + str(e)
+
+def check_request(item_info):
+
+    """
+    Code to check whether the file already exists, and if it does
+    not, activate the request and begin download.
+
+    :param item_info: This is the line of the item_info text file
+                      which details the item_id and item_type.
+
+    :return: N/A
+
+    """
+
+    # Strip out the item_type and item_id from item_info
+    item_id, item_type, asset_type, asset_xml, asset_udm = item_info.split(",")[:]
+
+    asset_list = [asset_type, asset_xml, asset_udm]
+
+    for asset in asset_list:
+
+        if asset == "analytic_xml":
+            if os.path.isfile(asset + "/" + item_id + "_xml.xml"):
+                print item_id + " already exists.\n"
+            else:
+                activate_item(asset, item_id, item_type)
+
+        else:
+            if os.path.isfile(asset + "/" + item_id + "_" + asset + ".tif"):
+                print item_id + " already exists.\n"
+            else:
+                activate_item(asset, item_id, item_type)
+
 # ========================================================================== #
 
 # GeoJSON AOI
@@ -152,7 +184,9 @@ with open("configuration.json") as f:
     start_date = conf[0]["start_date"]
     end_date = conf[0]["end_date"]
     item_type_name = conf[0]["item_type_name"]
-    asset_type = conf[0]["asset_type"]
+    asset_type = conf[0]["asset_type1"]
+    asset_xml = conf[0]["asset_type2"]
+    asset_udm = conf[0]["asset_type3"]
 
     # Set a limit for the maximum number of results to download from the API
     # that have been returned from the API request.
@@ -201,8 +235,6 @@ with open("id_list/image_ids.txt", "w") as id_file:
     # behind the scenes, the client is paging responses from the API
     for item in result.items_iter(limit=max_download):
 
-        print item
-
         props = item["properties"]
         item_id = item["id"]
         item_type = item["properties"]["item_type"]
@@ -219,7 +251,16 @@ with open("id_list/image_ids.txt", "w") as id_file:
             metadata_file.write(json.dumps(props))
 
         # Append each item_id to a text file to support parallelism
-        id_file.write(item_id+" "+item_type+"\n")
+        id_file.write(item_id+","+item_type+","+asset_type+","+asset_xml+","+asset_udm+"\n")
+
+# Set up the file structure in the current directory
+for asset in [asset_type, asset_xml, asset_udm]:
+    # Check to prevent trying to download the same image over and over
+    try:
+        os.makedirs(asset + "/")
+    except OSError as e:
+        if e.errno == 17:
+            print "Directory already exists."
 
 # Reopen the image_id text file in read mode to
 # pass to the activate_item
@@ -227,11 +268,11 @@ with open("id_list/image_ids.txt", "r") as id_file:
     item_info = id_file.read().splitlines()[:]
 
     # Set up the parallelism so that 5 requests can run simultaneously
-    parallelism = 8
+    parallelism = 2
     thread_pool = ThreadPool(parallelism)
 
-    # All items will be sent to the "activate_item" function but only
+    # All items will be sent to the "check_request" function but only
     # 5 will be run at once
-    thread_pool.map(activate_item, item_info)
+    thread_pool.map(check_request, item_info)
 
 # ================================================================= #
